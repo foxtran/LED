@@ -1,0 +1,6 @@
+calc=CCSD
+ccprog=mrcc
+core=corr
+scfiguess=mo
+scftype=%WF%
+basis=%BASIS%

@@ -1,0 +1,11 @@
+scfiguess=mo
+scfmaxit=1
+dfbasis_scf=none
+led=ecb
+dft=userd
+1
+1.0 HFx
+1
+1.0 led
+scftype=%WF%
+basis=%BASIS%
