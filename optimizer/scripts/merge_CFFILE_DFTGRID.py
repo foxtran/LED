@@ -3,10 +3,12 @@
 import numpy as np
 import tagarray as ta
 
-ECC = ta.Container.load("CFFILE.tadump")
-DFTORB = ta.Container.load("DFTGRID.tadump")
+fdir = "Be_ULED_cc-pVTZ"
 
-total = ta.Container("Be_RLED_cc-pVTZ")
+ECC = ta.Container.load(f"{fdir}/CFFILE.tadump")
+DFTORB = ta.Container.load(f"{fdir}/DFTGRID.tadump")
+
+total = ta.Container(fdir)
 print(total.description)
 print(DFTORB.keys())
 print(ECC.keys())
@@ -16,11 +18,11 @@ for k in ECC.keys():
 for k in DFTORB.keys():
   total[k] = DFTORB[k]
 
-if np.all(total['scftype'].data == [82,72,70]): # RHF
-  total['weight'] = total['weight'].data * 0.5
-  for k in [ x for x in total.keys() if ".B." in x ]:
-    kA = k.replace(".B.", ".A.")
-    total[k] = total[kA]
+if np.all(total['scftype'].data == [82,72,70,32]): # RHF
+  for k in [ x for x in total.keys() if ".A." in x ]:
+    kA = k.replace(".A.", ".B.")
+    total[k] = total[k].data * np.sqrt(0.5)
+    total[kA] = total[k]
 
 total.save(total.description + ".tadump_old")
 
