@@ -28,8 +28,7 @@ constexpr int get_features_count(bool use_rho, bool use_tau, bool use_nrg) {
   const bool nrg_used[NFEATURES] = {false, false, false, false, true};
   int vars_count = 0;
   for (int i = 0; i < NFEATURES; i++) {
-    if ((use_rho || !rho_used[i]) &&
-        (use_tau || !tau_used[i]) &&
+    if ((use_rho || !rho_used[i]) && (use_tau || !tau_used[i]) &&
         (use_nrg || !nrg_used[i])) {
       vars_count++;
     }
@@ -48,8 +47,7 @@ inline double gorner_factorization_evaluate(const SystemData &data,
   constexpr int vars_count = get_features_count(use_rho, use_tau, use_nrg);
   std::array<double, vars_count> v, f;
   for (int i = 0, j = 0; i < NFEATURES; i++) {
-    if ((use_rho || !rho_used[i]) &&
-        (use_tau || !tau_used[i]) &&
+    if ((use_rho || !rho_used[i]) && (use_tau || !tau_used[i]) &&
         (use_nrg || !nrg_used[i])) {
       v[j] = data.features[i][datapoint];
       j++;
@@ -73,7 +71,9 @@ double compute_orbital_energy(const SystemData &data,
                               const double *const coeffs) {
   double energy = 0.0;
   for (int i = 0; i < data.Npoints; i++) {
-    energy += data.prefactor[i] * coeffs[0] * compute(data, i, &coeffs[0]);
+    if (std::abs(data.prefactor[i]) > 1e-15) {
+      energy += data.prefactor[i] * coeffs[0] * compute(data, i, &coeffs[0]);
+    }
   }
   return energy;
 }
