@@ -15,8 +15,9 @@ public:
   int Norbs;
   double energy;
   std::vector<SystemData> data;
+  const std::string name;
   inline System(const std::filesystem::path &filepath) noexcept
-      : Norbs(0), energy(0.0), data({}) {
+      : Norbs(0), energy(0.0), data({}), name(filepath) {
     TA::Container c = TA::Container::load(filepath);
     int64_t nalpha = c["nalpha"]->raw_data<int64_t *>()[0];
     int64_t nbeta = c["nbeta"]->raw_data<int64_t *>()[0];

@@ -13,7 +13,8 @@ PYBIND11_MODULE(LED, m) {
              return new System(filepath);
            }),
            py::arg("filepath") = std::string(""),
-           py::return_value_policy::take_ownership);
+           py::return_value_policy::take_ownership)
+      .def_readonly("name", &System::name);
 
   py::class_<EnhancementFactor>(m, "EnhancementFactor")
       .def(py::init([](int factorization_order, bool use_tau, bool use_nrg) {
@@ -33,5 +34,6 @@ PYBIND11_MODULE(LED, m) {
       .def("compute_error",
            py::overload_cast<const std::vector<System> &, double>(
                &EnhancementFactor::compute_error),
-           py::arg("systems_list"), py::arg("omega") = 0.5);
+           py::arg("systems_list"), py::arg("omega") = 0.5)
+      .def("compute_total_energy", &EnhancementFactor::compute_total_energy);
 }

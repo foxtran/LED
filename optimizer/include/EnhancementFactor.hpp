@@ -12,17 +12,19 @@ namespace LED {
 
 using ComputeError =
     std::function<double(const System &, const double *const, const double)>;
-using KeyComputeError = std::tuple<int, int, bool, bool>;
+using ComputeTotalEnergy =
+    std::function<double(const System &, const double *const)>;
+using KeyCompute = std::tuple<int, int, bool, bool>;
 
-struct KeyComputeError_hash {
-  std::size_t operator()(const KeyComputeError &k) const {
+struct KeyCompute_hash {
+  std::size_t operator()(const KeyCompute &k) const {
     return (std::get<0>(k) << 24) + (std::get<1>(k) << 16) +
            ((std::size_t)std::get<2>(k) << 8) +
            ((std::size_t)std::get<3>(k) << 7);
   }
 };
 
-constexpr int get_features_count(bool use_rho, bool use_tau, bool use_nrg) {
+constexpr int get_features_count(bool use_rho, bool use_tau, bool use_nrg) noexcept {
   const bool rho_used[NFEATURES] = {true, false, true, true, true};
   const bool tau_used[NFEATURES] = {false, true, true, true, false};
   const bool nrg_used[NFEATURES] = {false, false, false, false, true};
@@ -39,7 +41,7 @@ constexpr int get_features_count(bool use_rho, bool use_tau, bool use_nrg) {
 template <std::size_t GFlevel, bool use_tau = false, bool use_nrg = false>
 inline double gorner_factorization_evaluate(const SystemData &data,
                                             const int datapoint,
-                                            const double *const coeffs) {
+                                            const double *const coeffs) noexcept {
   constexpr bool use_rho = true;
   constexpr bool rho_used[NFEATURES] = {true, false, true, true, true};
   constexpr bool tau_used[NFEATURES] = {false, true, true, true, false};
@@ -68,7 +70,7 @@ inline double gorner_factorization_evaluate(const SystemData &data,
 
 template <double (*compute)(const SystemData &, const int, const double *const)>
 double compute_orbital_energy(const SystemData &data,
-                              const double *const coeffs) {
+                              const double *const coeffs) noexcept {
   double energy = 0.0;
   for (int i = 0; i < data.Npoints; i++) {
     if (std::abs(data.prefactor[i]) > 1e-15) {
@@ -81,7 +83,7 @@ double compute_orbital_energy(const SystemData &data,
 template <double (*compute_orbital_energy)(const SystemData &data,
                                            const double *const coeffs)>
 double compute_system_error(const System &sys, const double *const coeffs,
-                            const double omega) {
+                            const double omega) noexcept {
   double error = 0.0;
   double total_energy = 0.0;
   for (int i = 0; i < sys.Norbs; i++) {
@@ -94,11 +96,22 @@ double compute_system_error(const System &sys, const double *const coeffs,
   return error;
 }
 
+template <double (*compute_orbital_energy)(const SystemData &data,
+                                           const double *const coeffs)>
+double compute_total_energy(const System &sys, const double *const coeffs) noexcept {
+  double total_energy = 0.0;
+  for (int i = 0; i < sys.Norbs; i++) {
+    total_energy += compute_orbital_energy(sys.data[i], coeffs);
+  }
+  return total_energy;
+}
+
 template <ssize_t N>
-void fill_map(std::unordered_map<KeyComputeError, ComputeError,
-                                 KeyComputeError_hash> &ce) {
+void fill_map(
+    std::unordered_map<KeyCompute, ComputeError, KeyCompute_hash> &ce,
+    std::unordered_map<KeyCompute, ComputeTotalEnergy, KeyCompute_hash> &cte) noexcept {
   if constexpr (N >= 0) {
-    fill_map<N - 1>(ce);
+    fill_map<N - 1>(ce, cte);
     ce[{1, N, false, false}] = compute_system_error<
         compute_orbital_energy<gorner_factorization_evaluate<N, false, false>>>;
     ce[{1, N, false, true}] = compute_system_error<
@@ -107,20 +120,30 @@ void fill_map(std::unordered_map<KeyComputeError, ComputeError,
         compute_orbital_energy<gorner_factorization_evaluate<N, true, false>>>;
     ce[{1, N, true, true}] = compute_system_error<
         compute_orbital_energy<gorner_factorization_evaluate<N, true, true>>>;
+    cte[{1, N, false, false}] = compute_total_energy<
+        compute_orbital_energy<gorner_factorization_evaluate<N, false, false>>>;
+    cte[{1, N, false, true}] = compute_total_energy<
+        compute_orbital_energy<gorner_factorization_evaluate<N, false, true>>>;
+    cte[{1, N, true, false}] = compute_total_energy<
+        compute_orbital_energy<gorner_factorization_evaluate<N, true, false>>>;
+    cte[{1, N, true, true}] = compute_total_energy<
+        compute_orbital_energy<gorner_factorization_evaluate<N, true, true>>>;
   }
 }
 
 class EnhancementFactor {
 private:
   ComputeError compute_error_f;
+  ComputeTotalEnergy compute_total_energy_f;
   std::vector<double> coeffs;
   std::size_t Nparams;
 
 public:
   EnhancementFactor(int factorization_order, bool use_tau, bool use_nrg) {
-    std::unordered_map<KeyComputeError, ComputeError, KeyComputeError_hash>
-        ce_funs = {};
-    fill_map<MAX_FACTORIZATION>(ce_funs);
+    std::unordered_map<KeyCompute, ComputeError, KeyCompute_hash> ce_funs = {};
+    std::unordered_map<KeyCompute, ComputeTotalEnergy, KeyCompute_hash>
+        cte_funs = {};
+    fill_map<MAX_FACTORIZATION>(ce_funs, cte_funs);
     if (factorization_order > MAX_FACTORIZATION) {
       throw std::runtime_error("Factorization order is higher than " +
                                std::to_string(MAX_FACTORIZATION) + "!");
@@ -129,6 +152,8 @@ public:
       throw std::runtime_error("Factorization order is less than 0!");
     }
     this->compute_error_f = ce_funs[{1, factorization_order, use_tau, use_nrg}];
+    this->compute_total_energy_f =
+        cte_funs[{1, factorization_order, use_tau, use_nrg}];
     this->Nparams =
         1 + get_features_count(true, use_tau, use_nrg) * factorization_order;
     coeffs = std::vector<double>(this->Nparams, 0.0);
@@ -156,6 +181,9 @@ public:
       res += this->compute_error_f(syss[s], this->coeffs.data(), omega);
     }
     return res;
+  }
+  double compute_total_energy(const System &sys) noexcept {
+    return this->compute_total_energy_f(sys, this->coeffs.data());
   }
 };
 
